@@ -8,5 +8,5 @@ import java.lang.annotation.ElementType;
 @Retention(RetentionPolicy.RUNTIME)  // accessible à l'exécution
 @Target(ElementType.TYPE)            // utilisable sur une classe
 public @interface MonController {
-    
+    String url();
 }
