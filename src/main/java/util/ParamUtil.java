@@ -1,7 +1,16 @@
 package util;
 
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.lang.reflect.Parameter;
+import java.util.ArrayList;
+import java.util.Enumeration;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 
 import annotation.Param;
 import jakarta.servlet.http.HttpServletRequest;
@@ -14,10 +23,119 @@ public class ParamUtil {
         Object[] arguments = new Object[parametres.length];
         for (int i = 0; i < parametres.length; i++) {
             String nom = getNom(methode, parametres[i], i);
-            String valeur = request.getParameter(nom);
-            arguments[i] = convertir(valeur, parametres[i].getType(), nom);
+            Class<?> type = parametres[i].getType();
+            if (estTypeSimple(type)) {
+                arguments[i] = convertir(request.getParameter(nom), type, nom);
+            } else {
+                verifierObjet(type, nom);
+                // les champs de l'objet arrivent préfixés : personne.nom, personne.age...
+                arguments[i] = construireObjet(type, nom, request, new HashSet<>());
+            }
         }
         return arguments;
+    }
+
+    public static boolean estTypeSimple(Class<?> type) {
+        return type.isPrimitive()
+                || type == String.class
+                || type == Integer.class || type == Long.class || type == Double.class
+                || type == Float.class || type == Short.class || type == Byte.class
+                || type == Character.class || type == Boolean.class;
+    }
+
+    // Objet construisible : une classe concrète du projet (pas un tableau, une liste, une interface...)
+    private static boolean estObjetConstructible(Class<?> type) {
+        return !type.isArray() && !type.isInterface() && !type.isEnum()
+                && !Modifier.isAbstract(type.getModifiers())
+                && !type.getName().startsWith("java.") && !type.getName().startsWith("jakarta.");
+    }
+
+    private static void verifierObjet(Class<?> type, String nom) {
+        if (!estObjetConstructible(type)) {
+            throw new IllegalStateException(nom + " : type " + type.getName() + " non supporté en paramètre");
+        }
+    }
+
+    // enCours : classes en cours de construction, pour ne pas boucler (ex : Personne qui contient une Personne)
+    private static Object construireObjet(Class<?> type, String prefixe, HttpServletRequest request,
+            Set<Class<?>> enCours) {
+        Object objet;
+        try {
+            Constructor<?> constructeur = type.getDeclaredConstructor();
+            constructeur.setAccessible(true);
+            objet = constructeur.newInstance();
+        } catch (NoSuchMethodException e) {
+            throw new IllegalStateException(type.getSimpleName()
+                    + " doit avoir un constructeur sans argument pour être construit depuis un formulaire");
+        } catch (Exception e) {
+            throw new IllegalStateException("Impossible de créer " + type.getSimpleName() + " : " + e.getMessage(), e);
+        }
+
+        enCours.add(type);
+        for (Field field : getAttributs(type)) {
+            String nom = prefixe + "." + field.getName();
+            Class<?> typeAttribut = field.getType();
+            if (estTypeSimple(typeAttribut)) {
+                String valeur = request.getParameter(nom);
+                // champ absent du formulaire : on garde la valeur initiale de l'objet
+                if (valeur != null) {
+                    affecter(objet, field, convertir(valeur, typeAttribut, nom), nom);
+                }
+            } else if (estObjetConstructible(typeAttribut) && !enCours.contains(typeAttribut)
+                    && contientPrefixe(request, nom)) {
+                // objet imbriqué (personne.adresse.ville) : construit seulement si le formulaire en parle
+                affecter(objet, field, construireObjet(typeAttribut, nom, request, enCours), nom);
+            }
+            // autres types (List, Date, tableau...) : ignorés pour l'instant
+        }
+        enCours.remove(type);
+        return objet;
+    }
+
+    private static boolean contientPrefixe(HttpServletRequest request, String prefixe) {
+        Enumeration<String> noms = request.getParameterNames();
+        while (noms.hasMoreElements()) {
+            if (noms.nextElement().startsWith(prefixe + ".")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // setNom(...) s'il existe, sinon affectation directe de l'attribut
+    private static void affecter(Object objet, Field field, Object valeur, String nom) {
+        String nomSetter = "set" + Character.toUpperCase(field.getName().charAt(0)) + field.getName().substring(1);
+        try {
+            Method setter = objet.getClass().getMethod(nomSetter, field.getType());
+            setter.invoke(objet, valeur);
+        } catch (NoSuchMethodException e) {
+            try {
+                field.setAccessible(true);
+                field.set(objet, valeur);
+            } catch (IllegalAccessException ex) {
+                throw new IllegalStateException(nom + " : impossible d'affecter l'attribut", ex);
+            }
+        } catch (InvocationTargetException e) {
+            // le setter a refusé la valeur (ex : throw new IllegalArgumentException("âge négatif"))
+            throw new ParamException(nom + " : " + e.getCause().getMessage());
+        } catch (IllegalAccessException e) {
+            throw new IllegalStateException(nom + " : setter " + nomSetter + " inaccessible", e);
+        }
+    }
+
+    // Attributs de la classe et de ses classes mères (sans static ni final)
+    private static List<Field> getAttributs(Class<?> clazz) {
+        List<Field> attributs = new ArrayList<>();
+        for (Class<?> c = clazz; c != null && c != Object.class; c = c.getSuperclass()) {
+            for (Field field : c.getDeclaredFields()) {
+                int mod = field.getModifiers();
+                if (Modifier.isStatic(mod) || Modifier.isFinal(mod) || field.isSynthetic()) {
+                    continue;
+                }
+                attributs.add(field);
+            }
+        }
+        return attributs;
     }
 
     // @Param("nom") en priorité, sinon le nom Java (seulement si compilé avec -parameters)
