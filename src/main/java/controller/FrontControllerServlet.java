@@ -1,9 +1,12 @@
 package controller;
 
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
+import annotation.RestAPI;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
@@ -11,6 +14,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import model.HTTPmethode;
 import model.MethodeInfo;
 import model.UrlInfo;
+import util.JsonUtil;
 
 public class FrontControllerServlet extends HttpServlet {
     private HashMap<UrlInfo, MethodeInfo> mapping = new HashMap<>();
@@ -67,6 +71,12 @@ public class FrontControllerServlet extends HttpServlet {
             return;
         }
 
+        // @RestAPI : on renvoie uniquement du JSON, rien ne doit être écrit avant
+        if (method.getMethode().isAnnotationPresent(RestAPI.class)) {
+            processRestAPI(method, response);
+            return;
+        }
+
         response.getWriter().println("<h2>URL trouvée</h2>");
         response.getWriter().println("<p>Route : " + route + "</p>");
         response.getWriter().println("<p>Méthode appelée : " + method.getMethode() + "</p>");
@@ -93,6 +103,27 @@ public class FrontControllerServlet extends HttpServlet {
         } catch (Exception e) {
             throw new ServletException("Erreur lors de l'invocation de la méthode", e);
         }
+    }
+
+    protected void processRestAPI(MethodeInfo method, HttpServletResponse response) throws IOException {
+        response.setContentType("application/json;charset=UTF-8");
+        String json;
+        try {
+            Class<?> clazz = method.getMethode().getDeclaringClass();
+            Object instance = clazz.getDeclaredConstructor().newInstance();
+            Object resultat = method.getMethode().invoke(instance);
+            json = JsonUtil.toJson(resultat);
+        } catch (Exception e) {
+            // l'exception levée par la méthode du controller est enveloppée dans InvocationTargetException
+            Throwable cause = (e instanceof InvocationTargetException) ? e.getCause() : e;
+            Map<String, Object> erreur = new LinkedHashMap<>();
+            erreur.put("code", 500);
+            erreur.put("erreur", cause.getClass().getSimpleName());
+            erreur.put("message", cause.getMessage());
+            response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+            json = JsonUtil.toJson(erreur);
+        }
+        response.getWriter().print(json);
     }
 
 }
