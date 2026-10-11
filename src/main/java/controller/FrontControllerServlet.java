@@ -15,6 +15,8 @@ import model.HTTPmethode;
 import model.MethodeInfo;
 import model.UrlInfo;
 import util.JsonUtil;
+import util.ParamException;
+import util.ParamUtil;
 
 public class FrontControllerServlet extends HttpServlet {
     private HashMap<UrlInfo, MethodeInfo> mapping = new HashMap<>();
@@ -43,6 +45,8 @@ public class FrontControllerServlet extends HttpServlet {
     protected void processRequest(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
 
+        // avant tout getParameter, sinon les accents envoyés en POST arrivent abîmés
+        request.setCharacterEncoding("UTF-8");
         response.setContentType("text/html;charset=UTF-8");
         String contextPath = request.getContextPath();
         String requestURI = request.getRequestURI();
@@ -73,7 +77,16 @@ public class FrontControllerServlet extends HttpServlet {
 
         // @RestAPI : on renvoie uniquement du JSON, rien ne doit être écrit avant
         if (method.getMethode().isAnnotationPresent(RestAPI.class)) {
-            processRestAPI(method, response);
+            processRestAPI(method, request, response);
+            return;
+        }
+
+        // valeurs du formulaire converties avant d'écrire quoi que ce soit dans la réponse
+        Object[] arguments;
+        try {
+            arguments = ParamUtil.getArguments(method.getMethode(), request);
+        } catch (ParamException e) {
+            response.sendError(HttpServletResponse.SC_BAD_REQUEST, e.getMessage());
             return;
         }
 
@@ -84,7 +97,7 @@ public class FrontControllerServlet extends HttpServlet {
         try {
             Class<?> clazz = method.getMethode().getDeclaringClass();
             Object instance = clazz.getDeclaredConstructor().newInstance();
-            Object resultat = method.getMethode().invoke(instance);
+            Object resultat = method.getMethode().invoke(instance, arguments);
             if (resultat != null) {
                 response.getWriter().println("<p>Résultat : " + resultat + "</p>");
             }
@@ -105,22 +118,28 @@ public class FrontControllerServlet extends HttpServlet {
         }
     }
 
-    protected void processRestAPI(MethodeInfo method, HttpServletResponse response) throws IOException {
+    protected void processRestAPI(MethodeInfo method, HttpServletRequest request, HttpServletResponse response)
+            throws IOException {
         response.setContentType("application/json;charset=UTF-8");
         String json;
         try {
+            Object[] arguments = ParamUtil.getArguments(method.getMethode(), request);
             Class<?> clazz = method.getMethode().getDeclaringClass();
             Object instance = clazz.getDeclaredConstructor().newInstance();
-            Object resultat = method.getMethode().invoke(instance);
+            Object resultat = method.getMethode().invoke(instance, arguments);
             json = JsonUtil.toJson(resultat);
         } catch (Exception e) {
             // l'exception levée par la méthode du controller est enveloppée dans InvocationTargetException
             Throwable cause = (e instanceof InvocationTargetException) ? e.getCause() : e;
+            // valeur du formulaire invalide : erreur du client (400), sinon erreur du serveur (500)
+            int code = (cause instanceof ParamException)
+                    ? HttpServletResponse.SC_BAD_REQUEST
+                    : HttpServletResponse.SC_INTERNAL_SERVER_ERROR;
             Map<String, Object> erreur = new LinkedHashMap<>();
-            erreur.put("code", 500);
+            erreur.put("code", code);
             erreur.put("erreur", cause.getClass().getSimpleName());
             erreur.put("message", cause.getMessage());
-            response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+            response.setStatus(code);
             json = JsonUtil.toJson(erreur);
         }
         response.getWriter().print(json);
