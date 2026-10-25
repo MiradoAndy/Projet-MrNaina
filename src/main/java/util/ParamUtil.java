@@ -14,6 +14,7 @@ import java.util.Set;
 
 import annotation.Param;
 import jakarta.servlet.http.HttpServletRequest;
+import model.Session;
 
 // Construit les arguments d'une méthode de controller à partir des paramètres de la requête
 public class ParamUtil {
@@ -26,6 +27,11 @@ public class ParamUtil {
         Parameter[] parametres = methode.getParameters();
         Object[] arguments = new Object[parametres.length];
         for (int i = 0; i < parametres.length; i++) {
+            // la session n'est pas un champ de formulaire : pas de @Param nécessaire
+            if (parametres[i].getType() == Session.class) {
+                arguments[i] = SessionUtil.getSession(request);
+                continue;
+            }
             String nom = getNom(methode, parametres[i], i);
             Class<?> type = parametres[i].getType();
             if (FichierUtil.estParametreFichier(parametres[i])) {
