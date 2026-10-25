@@ -19,12 +19,18 @@ import jakarta.servlet.http.HttpServletRequest;
 public class ParamUtil {
 
     public static Object[] getArguments(Method methode, HttpServletRequest request) {
+        // formulaire avec fichiers : on lit tout dès le début pour signaler un fichier trop gros (400)
+        if (FichierUtil.estMultipart(request)) {
+            FichierUtil.getParts(request);
+        }
         Parameter[] parametres = methode.getParameters();
         Object[] arguments = new Object[parametres.length];
         for (int i = 0; i < parametres.length; i++) {
             String nom = getNom(methode, parametres[i], i);
             Class<?> type = parametres[i].getType();
-            if (estTypeSimple(type)) {
+            if (FichierUtil.estParametreFichier(parametres[i])) {
+                arguments[i] = FichierUtil.getValeur(parametres[i], nom, request);
+            } else if (estTypeSimple(type)) {
                 arguments[i] = convertir(request.getParameter(nom), type, nom);
             } else {
                 verifierObjet(type, nom);
