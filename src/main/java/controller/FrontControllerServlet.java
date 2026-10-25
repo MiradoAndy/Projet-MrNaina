@@ -8,6 +8,7 @@ import java.util.Map;
 
 import annotation.RestAPI;
 import jakarta.servlet.ServletException;
+import jakarta.servlet.annotation.MultipartConfig;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -18,6 +19,12 @@ import util.JsonUtil;
 import util.ParamException;
 import util.ParamUtil;
 
+// Autorise l'envoi de fichiers (multipart/form-data) : 10 Mo par fichier, 50 Mo par envoi,
+// gardés en mémoire jusqu'à 1 Mo puis écrits temporairement sur le disque par Tomcat
+@MultipartConfig(
+        fileSizeThreshold = 1024 * 1024,
+        maxFileSize = 10L * 1024 * 1024,
+        maxRequestSize = 50L * 1024 * 1024)
 public class FrontControllerServlet extends HttpServlet {
     private HashMap<UrlInfo, MethodeInfo> mapping = new HashMap<>();
     private String prefixe = "";
