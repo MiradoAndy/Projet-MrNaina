@@ -84,9 +84,15 @@ public class FrontControllerServlet extends HttpServlet {
         }
 
         // @Auth : avant de lire les paramètres (sinon un upload serait lu pour un visiteur refusé)
-        if (AuthUtil.estProtege(method.getMethode()) && !AuthUtil.estConnecte(request)) {
-            refuserNonConnecte(method, route, request, response);
-            return;
+        if (AuthUtil.estProtege(method.getMethode())) {
+            if (!AuthUtil.estConnecte(request)) {
+                refuserNonConnecte(method, route, request, response);
+                return;
+            }
+            if (!AuthUtil.aUnRoleAutorise(method.getMethode(), request)) {
+                refuserRole(method, route, request, response);
+                return;
+            }
         }
 
         // @RestAPI : on renvoie uniquement du JSON, rien ne doit être écrit avant
@@ -156,6 +162,26 @@ public class FrontControllerServlet extends HttpServlet {
         } else {
             response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Authentification requise");
         }
+    }
+
+    // Utilisateur connecté mais sans le rôle exigé : 403 (pas de redirection vers le login, il est déjà connecté)
+    protected void refuserRole(MethodeInfo method, String route, HttpServletRequest request,
+            HttpServletResponse response) throws IOException {
+        getServletContext().log("Accès interdit à " + route + " : rôle requis " + AuthUtil.getRolesRequis(method.getMethode())
+                + ", rôle de l'utilisateur " + AuthUtil.getRolesUtilisateur(request)
+                + " (role-session-key '" + AuthUtil.getCleRole(getServletContext()) + "')");
+
+        if (method.getMethode().isAnnotationPresent(RestAPI.class)) {
+            Map<String, Object> erreur = new LinkedHashMap<>();
+            erreur.put("code", HttpServletResponse.SC_FORBIDDEN);
+            erreur.put("erreur", "AccesInterdit");
+            erreur.put("message", "Rôle insuffisant");
+            response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+            response.setContentType("application/json;charset=UTF-8");
+            response.getWriter().print(JsonUtil.toJson(erreur));
+            return;
+        }
+        response.sendError(HttpServletResponse.SC_FORBIDDEN, "Accès interdit : rôle insuffisant");
     }
 
     protected void processRestAPI(MethodeInfo method, HttpServletRequest request, HttpServletResponse response)
