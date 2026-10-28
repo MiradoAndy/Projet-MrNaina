@@ -15,6 +15,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import model.HTTPmethode;
 import model.MethodeInfo;
 import model.UrlInfo;
+import util.AuthUtil;
 import util.JsonUtil;
 import util.ParamException;
 import util.ParamUtil;
@@ -82,6 +83,12 @@ public class FrontControllerServlet extends HttpServlet {
             return;
         }
 
+        // @Auth : avant de lire les paramètres (sinon un upload serait lu pour un visiteur refusé)
+        if (AuthUtil.estProtege(method.getMethode()) && !AuthUtil.estConnecte(request)) {
+            refuserNonConnecte(method, route, request, response);
+            return;
+        }
+
         // @RestAPI : on renvoie uniquement du JSON, rien ne doit être écrit avant
         if (method.getMethode().isAnnotationPresent(RestAPI.class)) {
             processRestAPI(method, request, response);
@@ -122,6 +129,32 @@ public class FrontControllerServlet extends HttpServlet {
 
         } catch (Exception e) {
             throw new ServletException("Erreur lors de l'invocation de la méthode", e);
+        }
+    }
+
+    // Route @Auth sans utilisateur connecté : 401 en JSON pour une route @RestAPI,
+    // sinon redirection vers login-url (web.xml), ou 401 si aucune page de connexion n'est configurée
+    protected void refuserNonConnecte(MethodeInfo method, String route, HttpServletRequest request,
+            HttpServletResponse response) throws IOException {
+        // aide au diagnostic : une faute de frappe dans le nom de la donnée de session se voit ici
+        getServletContext().log("Accès refusé à " + route + " : la session ne contient pas '"
+                + AuthUtil.getCle(getServletContext()) + "' (auth-session-key)");
+
+        if (method.getMethode().isAnnotationPresent(RestAPI.class)) {
+            Map<String, Object> erreur = new LinkedHashMap<>();
+            erreur.put("code", HttpServletResponse.SC_UNAUTHORIZED);
+            erreur.put("erreur", "NonAuthentifie");
+            erreur.put("message", "Authentification requise");
+            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            response.setContentType("application/json;charset=UTF-8");
+            response.getWriter().print(JsonUtil.toJson(erreur));
+            return;
+        }
+        String loginUrl = AuthUtil.getLoginUrl(getServletContext());
+        if (loginUrl != null && !loginUrl.equals(route)) {
+            response.sendRedirect(request.getContextPath() + loginUrl);
+        } else {
+            response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Authentification requise");
         }
     }
 
