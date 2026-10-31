@@ -1,0 +1,14 @@
+# Sortie de Maven (le jar se reconstruit avec mvn clean package)
+target/
+
+# IDE
+.idea/
+*.iml
+.classpath
+.project
+.settings/
+.vscode/
+
+# Système
+.DS_Store
+Thumbs.db

@@ -15,6 +15,7 @@ import model.UrlInfo;
 
 public class Utilitaire {
 
+    // Toutes les classes du package ET de ses sous-packages
     public static List<Class<?>> getClasses(String packageName)
             throws IOException, ClassNotFoundException {
 
@@ -30,33 +31,55 @@ public class Utilitaire {
 
             URL resource = resources.nextElement();
 
-            File directory = new File(resource.getFile());
+            File directory;
+            try {
+                // toURI() (et non getFile()) : décode les espaces et accents du chemin (%20...)
+                directory = new File(resource.toURI());
+            } catch (Exception e) {
+                // ressource qui n'est pas un dossier de fichiers (ex : dans un jar) : ignorée
+                continue;
+            }
 
             if (directory.exists()) {
-
-                File[] files = directory.listFiles();
-
-                if (files != null) {
-
-                    for (File file : files) {
-
-                        if (file.getName().endsWith(".class")) {
-
-                            String simpleName = file.getName()
-                                    .substring(0, file.getName().length() - 6);
-
-                            String fullName = packageName + "." + simpleName;
-
-                            Class<?> clazz = Class.forName(fullName);
-
-                            classes.add(clazz);
-                        }
-                    }
-                }
+                chargerClasses(directory, packageName, classes);
             }
         }
 
         return classes;
+    }
+
+    private static void chargerClasses(File directory, String packageName, List<Class<?>> classes)
+            throws ClassNotFoundException {
+
+        File[] files = directory.listFiles();
+
+        if (files == null) {
+            return;
+        }
+
+        for (File file : files) {
+
+            if (file.isDirectory()) {
+                // sous-package : app.controllers -> app.controllers.admin
+                chargerClasses(file, packageName + "." + file.getName(), classes);
+
+            } else if (file.getName().endsWith(".class")) {
+
+                String simpleName = file.getName()
+                        .substring(0, file.getName().length() - 6);
+
+                // package-info.class et module-info.class ne sont pas des classes à charger
+                if (simpleName.contains("-")) {
+                    continue;
+                }
+
+                String fullName = packageName + "." + simpleName;
+
+                Class<?> clazz = Class.forName(fullName);
+
+                classes.add(clazz);
+            }
+        }
     }
 
     public static List<Class<?>> getClassesWithAnnotation(String packageName, Class annotationClass , Class methodeClass ,HashMap<UrlInfo,MethodeInfo> mapping)
@@ -71,10 +94,10 @@ public class Utilitaire {
                             UrlAnnotation urlAnnotation = methode.getAnnotation(UrlAnnotation.class);
                             UrlInfo u = new UrlInfo();
                             u.setAction(urlAnnotation.httpmethode());
-                            u.setUrl(urlAnnotation.value()); 
+                            u.setUrl(urlAnnotation.value());
                             MethodeInfo m = new MethodeInfo();
                             m.setMethode(methode);
-                            
+
                             if(mapping.containsKey(u)){
                                 throw new IllegalStateException("route en double");
                             };

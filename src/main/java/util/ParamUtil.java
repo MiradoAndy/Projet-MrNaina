@@ -13,13 +13,15 @@ import java.util.List;
 import java.util.Set;
 
 import annotation.Param;
+import jakarta.servlet.ServletContext;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import model.Session;
 
 // Construit les arguments d'une méthode de controller à partir des paramètres de la requête
 public class ParamUtil {
 
-    public static Object[] getArguments(Method methode, HttpServletRequest request) {
+    public static Object[] getArguments(Method methode, HttpServletRequest request, HttpServletResponse response) {
         // formulaire avec fichiers : on lit tout dès le début pour signaler un fichier trop gros (400)
         if (FichierUtil.estMultipart(request)) {
             FichierUtil.getParts(request);
@@ -27,9 +29,22 @@ public class ParamUtil {
         Parameter[] parametres = methode.getParameters();
         Object[] arguments = new Object[parametres.length];
         for (int i = 0; i < parametres.length; i++) {
-            // la session n'est pas un champ de formulaire : pas de @Param nécessaire
-            if (parametres[i].getType() == Session.class) {
+            // objets fournis par le framework (pas des champs de formulaire) : pas de @Param nécessaire
+            Class<?> typeInjecte = parametres[i].getType();
+            if (typeInjecte == Session.class) {
                 arguments[i] = SessionUtil.getSession(request);
+                continue;
+            }
+            if (typeInjecte == ServletContext.class) {
+                arguments[i] = request.getServletContext();
+                continue;
+            }
+            if (typeInjecte == HttpServletRequest.class) {
+                arguments[i] = request;
+                continue;
+            }
+            if (typeInjecte == HttpServletResponse.class) {
+                arguments[i] = response;
                 continue;
             }
             String nom = getNom(methode, parametres[i], i);

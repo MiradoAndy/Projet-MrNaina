@@ -104,7 +104,7 @@ public class FrontControllerServlet extends HttpServlet {
         // valeurs du formulaire converties avant d'écrire quoi que ce soit dans la réponse
         Object[] arguments;
         try {
-            arguments = ParamUtil.getArguments(method.getMethode(), request);
+            arguments = ParamUtil.getArguments(method.getMethode(), request, response);
         } catch (ParamException e) {
             response.sendError(HttpServletResponse.SC_BAD_REQUEST, e.getMessage());
             return;
@@ -127,7 +127,7 @@ public class FrontControllerServlet extends HttpServlet {
                 String urlSuivant = mv.getUrlSuivant();
                 urlSuivant = prefixe + urlSuivant + suffixe;
                 request.setAttribute("prefixe", prefixe);
-                for(Map.Entry<String, String> entry : mv.getList().entrySet()) {
+                for(Map.Entry<String, Object> entry : mv.getList().entrySet()) {
                     request.setAttribute(entry.getKey(), entry.getValue());
                 }
                 request.getRequestDispatcher(urlSuivant).forward(request, response);
@@ -189,7 +189,7 @@ public class FrontControllerServlet extends HttpServlet {
         response.setContentType("application/json;charset=UTF-8");
         String json;
         try {
-            Object[] arguments = ParamUtil.getArguments(method.getMethode(), request);
+            Object[] arguments = ParamUtil.getArguments(method.getMethode(), request, response);
             Class<?> clazz = method.getMethode().getDeclaringClass();
             Object instance = clazz.getDeclaredConstructor().newInstance();
             Object resultat = method.getMethode().invoke(instance, arguments);
