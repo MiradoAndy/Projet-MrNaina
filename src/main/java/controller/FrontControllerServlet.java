@@ -16,6 +16,7 @@ import model.HTTPmethode;
 import model.MethodeInfo;
 import model.UrlInfo;
 import util.AuthUtil;
+import util.ControleurUtil;
 import util.JsonUtil;
 import util.ParamException;
 import util.ParamUtil;
@@ -116,7 +117,7 @@ public class FrontControllerServlet extends HttpServlet {
 
         try {
             Class<?> clazz = method.getMethode().getDeclaringClass();
-            Object instance = clazz.getDeclaredConstructor().newInstance();
+            Object instance = ControleurUtil.getInstance(getServletContext(), clazz);
             Object resultat = method.getMethode().invoke(instance, arguments);
             if (resultat != null) {
                 response.getWriter().println("<p>Résultat : " + resultat + "</p>");
@@ -191,7 +192,7 @@ public class FrontControllerServlet extends HttpServlet {
         try {
             Object[] arguments = ParamUtil.getArguments(method.getMethode(), request, response);
             Class<?> clazz = method.getMethode().getDeclaringClass();
-            Object instance = clazz.getDeclaredConstructor().newInstance();
+            Object instance = ControleurUtil.getInstance(getServletContext(), clazz);
             Object resultat = method.getMethode().invoke(instance, arguments);
             json = JsonUtil.toJson(resultat);
         } catch (Exception e) {

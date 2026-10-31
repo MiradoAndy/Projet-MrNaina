@@ -12,6 +12,7 @@ import jakarta.servlet.http.HttpSessionEvent;
 import jakarta.servlet.http.HttpSessionListener;
 import model.MethodeInfo;
 import model.UrlInfo;
+import util.ControleurUtil;
 import util.SessionUtil;
 import util.Utilitaire;
 
@@ -42,6 +43,8 @@ public class AppContextListener implements ServletContextListener, HttpSessionLi
         context.setAttribute("mapping", mapping);
         // cache des Session (une instance par utilisateur)
         SessionUtil.getCache(context);
+        // cache des contrôleurs (une instance par classe, créée à la première utilisation)
+        ControleurUtil.getCache(context);
 
     }
 

@@ -83,6 +83,14 @@ public class AccueilController {
 Seuls `GET` et `POST` sont gérés. Deux méthodes ne peuvent pas avoir la même URL avec la même méthode HTTP :
 l'application refuse alors de démarrer (« route en double »).
 
+**Un contrôleur n'est créé qu'une seule fois** : à la première requête qui l'utilise (rien n'est créé au démarrage),
+puis la même instance sert toutes les routes de la classe, pour tous les utilisateurs. La classe doit avoir un
+constructeur sans argument ; s'il échoue, l'erreur est renvoyée et la requête suivante réessaie.
+
+> **Attention :** les attributs d'instance d'un contrôleur sont **partagés entre tous les utilisateurs et toutes les
+> requêtes simultanées**. N'y range pas de données propres à un utilisateur (un `private String nom;` serait écrasé
+> par la requête suivante) : utilise la `Session`, ou des variables locales de la méthode.
+
 ### Paramètres d'une méthode
 
 Les champs d'un formulaire (ou de l'URL) sont injectés dans les paramètres. Chaque paramètre est relié à son champ
